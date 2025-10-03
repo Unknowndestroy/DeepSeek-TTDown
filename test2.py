@@ -15,10 +15,10 @@ except ImportError:
 
 class VerticalPongGame:
     def __init__(self):
-        # Dikey oyun için boyutlar (Termux için optimize)
-        self.board_width = 25
-        self.board_height = 40
-        self.paddle_width = 3
+        # Ekran boyutuna göre dinamik boyutlandırma
+        self.phone_size = 6.5  # Varsayılan
+        self.setup_display_size()
+        
         self.ball_pos = [self.board_width // 2, self.board_height // 2]
         self.ball_vel = [1, -1]
         self.top_paddle = self.board_width // 2 - self.paddle_width // 2
@@ -40,58 +40,93 @@ class VerticalPongGame:
         self.connected = False
         self.waiting_for_connection = False
 
+    def setup_display_size(self):
+        # Ekran boyutunu ayarla
+        try:
+            size_input = input("Telefon ekran boyutu (inç) [6.5]: ").strip()
+            self.phone_size = float(size_input) if size_input else 6.5
+        except:
+            self.phone_size = 6.5
+        
+        # Ekran boyutuna göre oyun alanını ayarla
+        if self.phone_size <= 5.0:
+            self.board_width = 20
+            self.board_height = 30
+            self.paddle_width = 2
+        elif self.phone_size <= 6.5:
+            self.board_width = 25
+            self.board_height = 35
+            self.paddle_width = 3
+        else:
+            self.board_width = 30
+            self.board_height = 40
+            self.paddle_width = 4
+
     def clear_screen(self):
         os.system('cls' if os.name == 'nt' else 'clear')
 
     def draw_board(self):
         self.clear_screen()
         
-        # ASCII sanat - PONG başlığı
-        print("╔═════════════════════════╗")
-        print("║         P O N G         ║")
-        print("╚═════════════════════════╝")
+        # Başlık - ortalanmış
+        title_width = self.board_width + 2
+        title_line = "╔" + "═" * title_width + "╗"
+        title_text = "║" + "P O N G".center(title_width) + "║"
+        title_bottom = "╚" + "═" * title_width + "╝"
+        
+        print(title_line)
+        print(title_text)
+        print(title_bottom)
         
         # Skor gösterimi
-        print(f"   TOP: {self.top_score}     BOTTOM: {self.bottom_score}")
-        print(" " + "═" * 27)
+        score_text = f"TOP: {self.top_score}  BOTTOM: {self.bottom_score}"
+        print(score_text.center(title_width + 2))
+        
+        # Üst çizgi
+        print(" " + "═" * (self.board_width + 2))
         
         # Oyun alanı - DİKEY
         for y in range(self.board_height):
             line = "║"
             for x in range(self.board_width):
-                # Üst paddle (y == 1 satırında)
-                if y == 1 and self.top_paddle <= x < self.top_paddle + self.paddle_width:
+                # Üst paddle (y == 0 satırında)
+                if y == 0 and self.top_paddle <= x < self.top_paddle + self.paddle_width:
                     line += "█"
-                # Alt paddle (y == board_height-2 satırında)
-                elif y == self.board_height - 2 and self.bottom_paddle <= x < self.bottom_paddle + self.paddle_width:
+                # Alt paddle (y == board_height-1 satırında)
+                elif y == self.board_height - 1 and self.bottom_paddle <= x < self.bottom_paddle + self.paddle_width:
                     line += "█"
                 # Top
                 elif x == self.ball_pos[0] and y == self.ball_pos[1]:
                     line += "●"
-                # Sol ve sağ duvarlar
-                elif x == 0 or x == self.board_width - 1:
-                    line += "│"
                 # Boş alan
                 else:
                     line += " "
             line += "║"
             print(line)
         
-        # Alt bilgi çubuğu
-        print(" " + "═" * 27)
+        # Alt çizgi
+        print(" " + "═" * (self.board_width + 2))
+        
+        # Bilgi çubuğu
         info_line = f"Zorluk: {self.difficulty} | Kaçırma: {self.miss_count}/{self.max_misses}"
         if self.multiplayer:
             role = "Server" if self.is_server else "Client"
             status = "BAĞLANDI" if self.connected else "BEKLENİYOR"
-            info_line += f" | {role} ({status})"
+            info_line += f" | {role}({status})"
+        
         print(info_line)
         
         # Kontroller
         if self.control_scheme == "ARROWS":
-            print("Kontroller: ← → (Sol/Sağ)")
+            controls = "Kontroller: ← → (Sol/Sağ)"
         else:
-            print("Kontroller: A D (Sol/Sağ)")
-        print("Başlat: SPACE | Duraklat: ESC")
+            controls = "Kontroller: A D (Sol/Sağ)"
+        
+        if not self.game_active:
+            controls += " | BAŞLAT: SPACE"
+        
+        controls += " | DURAKLAT: ESC"
+        print(controls)
 
     def setup_terminal(self):
         if os.name != 'nt':
@@ -128,22 +163,31 @@ class VerticalPongGame:
                     elif key == ' ': return 'SPACE'
                     elif key == 'a' or key == 'A': return 'A'
                     elif key == 'd' or key == 'D': return 'D'
-                    elif key == '\n': return 'ENTER'
                 return None
         except:
             return None
 
     def show_menu(self, title, options):
         self.clear_screen()
-        print("╔═════════════════════════╗")
-        print(f"║       {title:^15}       ║")
-        print("╠═════════════════════════╣")
+        menu_width = self.board_width + 2
+        
+        print("╔" + "═" * menu_width + "╗")
+        print("║" + title.center(menu_width) + "║")
+        print("╠" + "═" * menu_width + "╣")
+        
         for i, option in enumerate(options, 1):
-            print(f"║  {i}. {option:<19} ║")
-        print("╚═════════════════════════╝")
+            option_text = f"{i}. {option}"
+            print("║" + option_text.ljust(menu_width) + "║")
+        
+        print("╚" + "═" * menu_width + "╝")
         return input("Seçiminiz (1-" + str(len(options)) + "): ")
 
     def main_menu(self):
+        # Ekran boyutu sadece ilk açılışta sorulur
+        if not hasattr(self, 'display_setup_done'):
+            self.setup_display_size()
+            self.display_setup_done = True
+
         while True:
             # Zorluk seçimi
             diff_choice = self.show_menu("ZORLUK", 
@@ -203,7 +247,7 @@ class VerticalPongGame:
                     time.sleep(1)
             
             if not self.is_server:
-                ip = input("Server IP (boş=bırak localhost): ")
+                ip = input("Server IP (boş=localhost): ")
                 self.server_ip = ip if ip else "127.0.0.1"
 
         self.start_game()
@@ -221,14 +265,15 @@ class VerticalPongGame:
             
             while self.waiting_for_connection and time.time() - start_time < 30:
                 self.draw_board()
-                print(f"\n⏳ Bağlantı bekleniyor... Port: {self.port}")
+                print(f"\nBağlantı bekleniyor... Port: {self.port}")
                 print("İptal için ESC'ye basın")
                 
                 try:
                     self.connection, addr = server_socket.accept()
                     self.connected = True
                     self.waiting_for_connection = False
-                    print(f"✅ Bağlantı kuruldu: {addr[0]}")
+                    print(f"Bağlantı kuruldu: {addr[0]}")
+                    time.sleep(1)
                     break
                 except socket.timeout:
                     pass
@@ -243,29 +288,30 @@ class VerticalPongGame:
             server_socket.close()
             
         except Exception as e:
-            print(f"❌ Server hatası: {e}")
-            input("Devam etmek için Enter'a basın...")
+            print(f"Server hatası: {e}")
+            time.sleep(2)
 
     def connect_to_server(self):
         try:
             self.connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.connection.settimeout(5)
-            print(f"🔗 {self.server_ip}:{self.port} bağlanılıyor...")
+            print(f"{self.server_ip}:{self.port} bağlanılıyor...")
             self.connection.connect((self.server_ip, self.port))
             self.connected = True
-            print("✅ Server'a bağlanıldı!")
+            print("Server'a bağlanıldı!")
+            time.sleep(1)
         except Exception as e:
-            print(f"❌ Bağlantı hatası: {e}")
-            input("Devam etmek için Enter'a basın...")
+            print(f"Bağlantı hatası: {e}")
+            time.sleep(2)
             self.connected = False
 
     def countdown(self):
         for i in range(3, 0, -1):
             self.draw_board()
-            print(f"\n🎯 {i} 🎯")
+            print(f"\n>>> {i} <<<")
             time.sleep(1)
         self.draw_board()
-        print("\n🚀 BAŞLA!")
+        print("\n>>> BAŞLA! <<<")
         time.sleep(0.5)
 
     def start_game(self):
@@ -282,9 +328,10 @@ class VerticalPongGame:
                     self.countdown()
                 else:
                     self.multiplayer = False
-                    print("❌ Multiplayer başarısız, tek oyuncu moduna geçiliyor...")
+                    print("Multiplayer başarısız, tek oyuncu moduna geçiliyor...")
                     time.sleep(2)
 
+            self.game_active = True
             self.game_loop()
         finally:
             self.restore_terminal()
@@ -298,30 +345,30 @@ class VerticalPongGame:
         self.ball_pos[1] += int(self.ball_vel[1] * self.ball_speed)
 
         # Sol ve sağ duvarlardan sekme
-        if self.ball_pos[0] <= 1 or self.ball_pos[0] >= self.board_width - 2:
+        if self.ball_pos[0] <= 0 or self.ball_pos[0] >= self.board_width - 1:
             self.ball_vel[0] *= -1
 
         # Üst paddle kontrolü
-        if self.ball_pos[1] <= 2:
+        if self.ball_pos[1] <= 0:
             if (self.top_paddle <= self.ball_pos[0] < self.top_paddle + self.paddle_width):
                 self.ball_vel[1] = abs(self.ball_vel[1])  # Aşağı dön
                 # Topun paddle'ın neresine çarptığına göre açı değiştir
                 paddle_center = self.top_paddle + self.paddle_width // 2
                 offset = (self.ball_pos[0] - paddle_center) / (self.paddle_width // 2)
-                self.ball_vel[0] = offset * 2
+                self.ball_vel[0] = offset * 1.5
             else:
                 self.bottom_score += 1
                 self.miss_count += 1
                 self.reset_ball()
 
         # Alt paddle kontrolü
-        elif self.ball_pos[1] >= self.board_height - 3:
+        elif self.ball_pos[1] >= self.board_height - 1:
             if (self.bottom_paddle <= self.ball_pos[0] < self.bottom_paddle + self.paddle_width):
                 self.ball_vel[1] = -abs(self.ball_vel[1])  # Yukarı dön
                 # Topun paddle'ın neresine çarptığına göre açı değiştir
                 paddle_center = self.bottom_paddle + self.paddle_width // 2
                 offset = (self.ball_pos[0] - paddle_center) / (self.paddle_width // 2)
-                self.ball_vel[0] = offset * 2
+                self.ball_vel[0] = offset * 1.5
             else:
                 self.top_score += 1
                 self.miss_count += 1
@@ -339,15 +386,15 @@ class VerticalPongGame:
     def reset_ball(self):
         self.ball_pos = [self.board_width // 2, self.board_height // 2]
         # Rastgele başlangıç yönü
-        self.ball_vel = [random.choice([-1, 1]) * 0.5, random.choice([-1, 1])]
+        self.ball_vel = [random.choice([-1, 1]) * 0.7, random.choice([-1, 1])]
         time.sleep(0.5)
 
     def game_over(self):
         self.draw_board()
-        loser = "ÜST" if self.miss_count >= self.max_misses else "ALT"
-        print(f"\n💀 OYUN BİTTİ! {loser} TARAF KAYBETTİ 💀")
-        print(f"📊 Son skor: {self.top_score} - {self.bottom_score}")
-        print("⏳ Yeni oyun başlatılıyor...")
+        loser = "ÜST" if self.top_score > self.bottom_score else "ALT"
+        print(f"\nOYUN BİTTİ! {loser} TARAF KAYBETTİ")
+        print(f"Son skor: {self.top_score} - {self.bottom_score}")
+        print("Yeni oyun başlatılıyor...")
         time.sleep(3)
         
         # Skorları sıfırla
@@ -362,15 +409,15 @@ class VerticalPongGame:
         
         # Zorluk seviyesine göre AI hassasiyeti
         if self.difficulty == "KOLAY":
-            if random.random() < 0.4:  # %40 hata yapma şansı
-                target_x += random.randint(-3, 3)
+            if random.random() < 0.3:  # %30 hata yapma şansı
+                target_x += random.randint(-2, 2)
         elif self.difficulty == "ZOR":
             # Daha iyi takip + öngörü
             if self.ball_vel[1] > 0:  # Top aşağı iniyorsa
-                predict_x = self.ball_pos[0] + self.ball_vel[0] * 5
+                predict_x = self.ball_pos[0] + self.ball_vel[0] * 3
                 target_x = predict_x - self.paddle_width // 2
             
-        target_x = max(1, min(self.board_width - self.paddle_width - 1, target_x))
+        target_x = max(0, min(self.board_width - self.paddle_width, target_x))
         
         # Yumuşak hareket
         if self.top_paddle < target_x:
@@ -388,25 +435,21 @@ class VerticalPongGame:
             return
 
         # Paddle hareketleri
-        paddle_speed = 2
+        paddle_speed = 1
         
         # Üst paddle kontrolü (Server veya tek oyuncu)
         if (self.multiplayer and self.is_server) or not self.multiplayer:
-            if key == 'LEFT' or key == 'A':
-                if self.top_paddle > 1:
-                    self.top_paddle = max(1, self.top_paddle - paddle_speed)
-            elif key == 'RIGHT' or key == 'D':
-                if self.top_paddle < self.board_width - self.paddle_width - 1:
-                    self.top_paddle = min(self.board_width - self.paddle_width - 1, self.top_paddle + paddle_speed)
+            if (key == 'LEFT' or key == 'A') and self.top_paddle > 0:
+                self.top_paddle -= paddle_speed
+            elif (key == 'RIGHT' or key == 'D') and self.top_paddle < self.board_width - self.paddle_width:
+                self.top_paddle += paddle_speed
 
         # Alt paddle kontrolü (Client veya tek oyuncu)
         if (self.multiplayer and not self.is_server) or not self.multiplayer:
-            if key == 'LEFT' or key == 'A':
-                if self.bottom_paddle > 1:
-                    self.bottom_paddle = max(1, self.bottom_paddle - paddle_speed)
-            elif key == 'RIGHT' or key == 'D':
-                if self.bottom_paddle < self.board_width - self.paddle_width - 1:
-                    self.bottom_paddle = min(self.board_width - self.paddle_width - 1, self.bottom_paddle + paddle_speed)
+            if (key == 'LEFT' or key == 'A') and self.bottom_paddle > 0:
+                self.bottom_paddle -= paddle_speed
+            elif (key == 'RIGHT' or key == 'D') and self.bottom_paddle < self.board_width - self.paddle_width:
+                self.bottom_paddle += paddle_speed
 
     def network_send_receive(self):
         if not self.connection or not self.connected:
@@ -453,8 +496,8 @@ class VerticalPongGame:
         
         while self.paused:
             choice = self.show_menu("DURAKLATILDI", 
-                ["▶ Devam Et", "🎯 Zorluk", "🎮 Kontroller", 
-                 "🌐 Multiplayer", "🏠 Ana Menü", "❌ Çıkış"])
+                ["Devam Et", "Zorluk Değiştir", "Kontrolleri Değiştir", 
+                 "Multiplayer Ayarları", "Ana Menü", "Çıkış"])
             
             if choice == "1":
                 self.paused = False
@@ -522,32 +565,40 @@ class VerticalPongGame:
                 self.connected = False
 
     def game_loop(self):
-        self.game_active = True
+        last_time = time.time()
         
         while self.game_active:
-            if not self.paused:
-                self.update_game()
-                self.draw_board()
+            current_time = time.time()
+            delta_time = current_time - last_time
+            
+            # Sabit FPS (15 FPS - Termux için optimize)
+            if delta_time >= 0.066:  # ~15 FPS
+                last_time = current_time
                 
-                if self.multiplayer and self.connected:
-                    self.network_send_receive()
+                if not self.paused:
+                    self.update_game()
+                    self.draw_board()
+                    
+                    if self.multiplayer and self.connected:
+                        self.network_send_receive()
 
             # Girdi işleme
             key = self.get_input()
             if key:
                 self.handle_input(key)
 
-            time.sleep(0.08)  # Daha yavaş FPS - Termux için optimize
+            # CPU kullanımını azalt
+            time.sleep(0.01)
 
 def main():
     try:
-        game = VerticalPongGame()
         while True:
+            game = VerticalPongGame()
             game.main_menu()
     except KeyboardInterrupt:
-        print("\n👋 Oyundan çıkılıyor...")
+        print("\nOyundan çıkılıyor...")
     except Exception as e:
-        print(f"❌ Bir hata oluştu: {e}")
+        print(f"Bir hata oluştu: {e}")
         input("Devam etmek için Enter'a basın...")
 
 if __name__ == "__main__":
